@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>FalconFlix App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 APP 专用字体 -->
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Noto Sans SC"', 'sans-serif'],
+                        tech: ['"Chakra Petch"', 'sans-serif'],
+                    },
+                    colors: {
+                        gold: '#D4AF37',
+                        dark: '#020408',
+                        card: '#121418',
+                        gray: {
+                            800: '#1F2937',
+                            900: '#111827',
+                        }
+                    },
+                    animation: {
+                        'spin-slow': 'spin 8s linear infinite',
+                        'marquee': 'marquee 25s linear infinite',
+                    },
+                    keyframes: {
+                        marquee: {
+                            '0%': { transform: 'translateX(0%)' },
+                            '100%': { transform: 'translateX(-100%)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #000; color: #fff; overflow: hidden; font-family: 'Noto Sans SC', sans-serif; user-select: none; -webkit-tap-highlight-color: transparent; }
+        
+        /* PC端模拟手机外壳 */
+        @media (min-width: 768px) {
+            body {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+                background-image: url('hero-bg.webp'); /* 使用背景图作为桌面背景 */
+                background-size: cover;
+                background-position: center;
+                backdrop-filter: blur(20px);
+            }
+            #app-frame {
+                width: 375px;
+                height: 812px;
+                border-radius: 40px;
+                overflow: hidden;
+                box-shadow: 0 0 50px rgba(0,0,0,0.8), 0 0 0 10px #1a1a1a;
+                position: relative;
+                background: #000;
+            }
+            /* 顶部刘海 */
+            #app-frame::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 50%;
+                transform: translateX(-50%);
+                width: 150px;
+                height: 30px;
+                background: #1a1a1a;
+                border-bottom-left-radius: 20px;
+                border-bottom-right-radius: 20px;
+                z-index: 100;
+            }
+        }
+
+        /* 移动端全屏 */
+        @media (max-width: 767px) {
+            #app-frame {
+                width: 100%;
+                height: 100%;
+                position: relative;
+            }
+        }
+
+        /* 页面切换逻辑 */
+        .page {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            overflow-y: auto;
+            padding-bottom: 90px; /* 避开底部导航 */
+            transition: opacity 0.2s ease-in-out;
+            opacity: 0; pointer-events: none; z-index: 0;
+            background: #020408;
+            display: none; 
+        }
+        .page.active { 
+            opacity: 1; pointer-events: auto; z-index: 10; 
+            display: block;
+        }
+        
+        /* 底部导航激活态 */
+        .nav-item { color: #6B7280; transition: all 0.3s; }
+        .nav-item.active { color: #D4AF37; }
+        .nav-item.active i { transform: translateY(-2px); }
+
+        /* 玻璃卡片 */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* 视频流样式 */
+        .video-container {
+            position: relative; height: 100%; width: 100%;
+            background-color: #000;
+        }
+        .video-overlay {
+            background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.2) 40%, transparent 100%);
+        }
+
+        /* 隐藏滚动条 */
+        .hide-scroll::-webkit-scrollbar { display: none; }
+        
+        /* 模态框动画 */
+        @keyframes slideUp {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+        }
+        .modal-content { animation: slideUp 0.3s ease-out forwards; }
+    </style>
+</head>
+<body>
+
+    <div id="app-frame">
+        <!-- ================== 页面 1: 首页 (沉浸式短剧流) ================== -->
+        <div id="page-home" class="page active" style="padding-bottom: 0; overflow: hidden;">
+            <!-- 顶部 Tabs -->
+            <div class="absolute top-12 left-0 w-full z-20 flex justify-center gap-6 text-lg font-bold drop-shadow-md text-white/80 pt-safe">
+                <span class="opacity-60 cursor-pointer">关注</span>
+                <span class="text-white border-b-2 border-gold pb-1 cursor-pointer">推荐</span>
+                <span class="opacity-60 cursor-pointer">RWA专区</span>
+            </div>
+
+            <!-- 模拟视频全屏 (使用 movie-2.png 作为视频封面) -->
+            <div class="video-container bg-[url('movie-2.png')] bg-cover bg-center h-full w-full relative">
+                <!-- 遮罩 -->
+                <div class="absolute inset-0 bg-black/20"></div>
+                <div class="absolute inset-0 video-overlay pointer-events-none"></div>
+
+                <!-- 右侧操作栏 -->
+                <div class="absolute right-4 bottom-24 flex flex-col items-center gap-6 z-30">
+                    <!-- 头像 -->
+                    <div class="relative mb-2">
+                        <img src="logo.jpg" class="w-12 h-12 rounded-full border border-white shadow-lg">
+                        <div class="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-red-500 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white border border-black">+</div>
+                    </div>
+                    
+                    <!-- 核心交互：认购按钮 -->
+                    <button onclick="openInvestModal()" class="flex flex-col items-center gap-1 active:scale-90 transition">
+                        <div class="w-11 h-11 rounded-full bg-gold/20 backdrop-blur border border-gold flex items-center justify-center text-gold text-2xl shadow-[0_0_15px_rgba(212,175,55,0.5)] animate-pulse">
+                            <i class="fa-solid fa-file-contract"></i>
+                        </div>
+                        <span class="text-[10px] font-bold text-gold drop-shadow-md">认购份额</span>
+                    </button>
+
+                    <div class="flex flex-col items-center gap-1 active:scale-90 transition">
+                        <i class="fa-solid fa-heart text-3xl text-white drop-shadow-lg"></i>
+                        <span class="text-xs text-white font-bold">12.5w</span>
+                    </div>
+                    <div class="flex flex-col items-center gap-1 active:scale-90 transition">
+                        <i class="fa-solid fa-comment-dots text-3xl text-white drop-shadow-lg"></i>
+                        <span class="text-xs text-white font-bold">3,248</span>
+                    </div>
+                    <div class="flex flex-col items-center gap-1 active:scale-90 transition">
+                        <i class="fa-solid fa-share text-3xl text-white drop-shadow-lg"></i>
+                        <span class="text-xs text-white font-bold">分享</span>
+                    </div>
+                    
+                    <!-- 旋转唱片 -->
+                    <div class="w-12 h-12 bg-gray-800 rounded-full border-4 border-gray-700 flex items-center justify-center mt-2 animate-spin-slow">
+                        <img src="logo.jpg" class="w-6 h-6 rounded-full">
+                    </div>
+                </div>
+
+                <!-- 底部信息 -->
+                <div class="absolute left-4 bottom-24 z-20 w-3/4 text-left">
+                    <div class="flex items-center gap-2 mb-3">
+                        <span class="bg-white/20 px-2 py-0.5 rounded text-[10px] font-bold backdrop-blur text-white">科幻巨制</span>
+                        <span class="bg-gold text-black px-2 py-0.5 rounded text-[10px] font-bold uppercase">可分红资产</span>
+                    </div>
+                    <h3 class="text-lg font-bold text-white mb-2 shadow-black drop-shadow-md">@FalconFlix 官方</h3>
+                    <p class="text-sm text-white leading-snug mb-2 drop-shadow-md">《城市之王》：赛博朋克世界的权力游戏，谁能笑到最后？点击右侧按钮参与众筹！🤖 <span class="text-gold font-bold">#RWA #Web3</span></p>
+                    <div class="flex items-center gap-2 text-xs text-white/80 overflow-hidden">
+                        <i class="fa-solid fa-music"></i>
+                        <div class="w-48 overflow-hidden whitespace-nowrap">
+                            <span class="inline-block animate-marquee">FalconFlix Original Sound - Cyberpunk Theme (Official) - Falcon Studio&nbsp;&nbsp;&nbsp;&nbsp;</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================== 页面 2: 发现 (数据看板) ================== -->
+        <div id="page-discover" class="page bg-dark pt-14 px-4">
+            <h2 class="text-2xl font-bold mb-6 text-white font-tech border-l-4 border-gold pl-3 mt-4">市场情报</h2>
+            
+            <!-- 搜索栏 -->
+            <div class="bg-gray-800/50 rounded-full px-4 py-3 flex items-center gap-3 text-gray-400 text-sm mb-6 border border-white/10">
+                <i class="fa-solid fa-search text-gray-500"></i> 搜索短剧 / 资产代码
+            </div>
+
+            <!-- 数据卡片流 -->
+            <div class="space-y-5 pb-20">
+                <!-- 核心数据 -->
+                <div class="glass-card p-4 rounded-2xl">
+                    <h3 class="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wider">Platform Data</h3>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-black/40 p-3 rounded-xl border border-white/5">
+                            <p class="text-[10px] text-gray-500">总锁仓量 (TVL)</p>
+                            <p class="text-xl font-bold text-white font-tech mt-1">$32.5M</p>
+                        </div>
+                        <div class="bg-black/40 p-3 rounded-xl border border-white/5">
+                            <p class="text-[10px] text-gray-500">累计分红</p>
+                            <p class="text-xl font-bold text-gold font-tech mt-1">$4.2M</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 图表展示 (引用现有 Nano 图) -->
+                <div class="glass-card p-0 rounded-2xl overflow-hidden">
+                    <div class="px-4 py-3 border-b border-white/5 flex justify-between items-center bg-white/5">
+                        <h3 class="text-xs font-bold text-gray-300 uppercase">项目池状态</h3>
+                        <span class="text-[10px] text-green-500 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span> Live</span>
+                    </div>
+                    <img src="nano-banana-2025-11-23T07-27-42.jpg" class="w-full object-cover">
+                </div>
+
+                <div class="glass-card p-0 rounded-2xl overflow-hidden">
+                    <div class="px-4 py-3 border-b border-white/5 bg-white/5">
+                        <h3 class="text-xs font-bold text-gray-300 uppercase">行业增长预测</h3>
+                    </div>
+                    <img src="nano-banana-2025-11-23T07-06-46.jpg" class="w-full object-cover">
+                </div>
+            </div>
+        </div>
+
+        <!-- ================== 页面 3: 资产 (钱包) ================== -->
+        <div id="page-assets" class="page bg-dark pt-14 px-4">
+            <div class="flex justify-between items-center mb-6 px-1 mt-4">
+                <h2 class="text-2xl font-bold text-white font-tech">我的资产</h2>
+                <i class="fa-solid fa-eye text-gray-500 cursor-pointer"></i>
+            </div>
+
+            <!-- 总资产卡片 -->
+            <div class="bg-gradient-to-br from-gold to-yellow-700 rounded-3xl p-6 mb-8 shadow-lg text-black relative overflow-hidden">
+                <div class="absolute -right-6 -bottom-6 text-8xl opacity-10 rotate-12"><i class="fa-solid fa-wallet"></i></div>
+                <p class="text-xs font-bold opacity-70 uppercase mb-1">Total Balance (USD)</p>
+                <h3 class="text-4xl font-black font-tech tracking-tight" id="totalBalance">$0.00</h3>
+                <div class="flex gap-3 mt-6">
+                    <button class="bg-black/20 hover:bg-black/30 px-6 py-2 rounded-full text-xs font-bold flex items-center gap-2 transition"><i class="fa-solid fa-arrow-down"></i> 充值</button>
+                    <button class="bg-black/20 hover:bg-black/30 px-6 py-2 rounded-full text-xs font-bold flex items-center gap-2 transition"><i class="fa-solid fa-arrow-up"></i> 提现</button>
+                </div>
+            </div>
+
+            <!-- 持仓列表 -->
+            <h3 class="text-xs font-bold text-gray-500 mb-4 uppercase px-1">Portfolio</h3>
+            <div class="space-y-3 pb-20" id="assetList">
+                <!-- 默认空状态 -->
+                <div class="text-center py-12 text-gray-700 border-2 border-dashed border-gray-800 rounded-2xl" id="emptyState">
+                    <i class="fa-solid fa-box-open text-4xl mb-3 opacity-50"></i>
+                    <p class="text-xs">暂无资产，快去首页认购吧</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================== 页面 4: 我的 (个人中心) ================== -->
+        <div id="page-profile" class="page bg-dark pt-0">
+            <!-- 头部背景 -->
+            <div class="h-72 bg-gradient-to-b from-gray-800 to-dark relative">
+                <img src="hero-bg.webp" class="absolute inset-0 w-full h-full object-cover opacity-30">
+                <div class="absolute inset-0 bg-gradient-to-b from-transparent to-dark"></div>
+                
+                <div class="absolute bottom-0 left-6 transform translate-y-6 flex items-end gap-4 w-full pr-6">
+                    <div class="w-24 h-24 rounded-full border-4 border-dark bg-gray-900 p-1">
+                        <img src="logo.jpg" class="w-full h-full rounded-full object-cover">
+                    </div>
+                    <div class="mb-8 flex-1">
+                        <h3 class="text-2xl font-bold text-white">CryptoInvestor</h3>
+                        <div class="flex items-center gap-2 mt-1">
+                            <span class="bg-gold text-black text-[10px] font-bold px-2 py-0.5 rounded-full">VIP 1</span>
+                            <span class="text-xs text-gray-400 font-mono">UID: 884291</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="absolute top-12 right-6 text-white text-xl mt-4">
+                    <i class="fa-solid fa-gear"></i>
+                </div>
+            </div>
+
+            <div class="px-4 mt-10 space-y-6">
+                <!-- 数据统计 -->
+                <div class="flex justify-between text-center bg-[#111] border border-white/10 rounded-2xl p-5 shadow-lg">
+                    <div class="flex-1">
+                        <p class="text-xl font-bold text-white font-tech">0</p>
+                        <p class="text-[10px] text-gray-500 uppercase mt-1">收藏</p>
+                    </div>
+                    <div class="w-px bg-white/10 h-8 self-center"></div>
+                    <div class="flex-1">
+                        <p class="text-xl font-bold text-white font-tech" id="investCount">0</p>
+                        <p class="text-[10px] text-gray-500 uppercase mt-1">投资项目</p>
+                    </div>
+                    <div class="w-px bg-white/10 h-8 self-center"></div>
+                    <div class="flex-1">
+                        <p class="text-xl font-bold text-gold font-tech">0</p>
+                        <p class="text-[10px] text-gray-500 uppercase mt-1">待领分红</p>
+                    </div>
+                </div>
+
+                <!-- 菜单列表 -->
+                <div class="space-y-1">
+                    <div class="glass-card p-4 rounded-t-xl flex justify-between items-center cursor-pointer active:bg-white/10 transition">
+                        <div class="flex items-center gap-4">
+                            <div class="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500"><i class="fa-solid fa-wallet"></i></div>
+                            <span class="text-sm font-bold">钱包管理</span>
+                        </div>
+                        <i class="fa-solid fa-chevron-right text-gray-600 text-xs"></i>
+                    </div>
+                    <div class="glass-card p-4 flex justify-between items-center cursor-pointer active:bg-white/10 transition">
+                        <div class="flex items-center gap-4">
+                            <div class="w-8 h-8 rounded-full bg-gold/10 flex items-center justify-center text-gold"><i class="fa-solid fa-file-contract"></i></div>
+                            <span class="text-sm font-bold">我的合约</span>
+                        </div>
+                        <i class="fa-solid fa-chevron-right text-gray-600 text-xs"></i>
+                    </div>
+                    <div class="glass-card p-4 flex justify-between items-center cursor-pointer active:bg-white/10 transition">
+                        <div class="flex items-center gap-4">
+                            <div class="w-8 h-8 rounded-full bg-red-500/10 flex items-center justify-center text-red-500"><i class="fa-solid fa-gift"></i></div>
+                            <span class="text-sm font-bold">邀请好友</span>
+                        </div>
+                        <span class="text-xs text-gray-500">得 10% 返佣</span>
+                    </div>
+                    <div class="glass-card p-4 rounded-b-xl flex justify-between items-center cursor-pointer active:bg-white/10 transition">
+                        <div class="flex items-center gap-4">
+                            <div class="w-8 h-8 rounded-full bg-purple-500/10 flex items-center justify-center text-purple-500"><i class="fa-solid fa-headset"></i></div>
+                            <span class="text-sm font-bold">联系客服</span>
+                        </div>
+                        <i class="fa-solid fa-chevron-right text-gray-600 text-xs"></i>
+                    </div>
+                </div>
+                
+                <button class="w-full py-4 bg-[#111] border border-white/10 rounded-xl text-red-500 font-bold text-sm mb-20 active:scale-95 transition">退出登录</button>
+            </div>
+        </div>
+
+        <!-- ================== 底部导航栏 (Dock) ================== -->
+        <div class="absolute bottom-0 left-0 w-full h-20 bg-[#020408]/95 border-t border-white/10 flex justify-around items-center pb-2 z-50 px-2 backdrop-blur-md">
+            <div class="nav-item active flex flex-col items-center gap-1 w-16 py-2 cursor-pointer" onclick="switchTab('home', this)">
+                <i class="fa-solid fa-house text-xl"></i>
+                <span class="text-[10px] font-medium">首页</span>
+            </div>
+            <div class="nav-item flex flex-col items-center gap-1 w-16 py-2 cursor-pointer" onclick="switchTab('discover', this)">
+                <i class="fa-solid fa-compass text-xl"></i>
+                <span class="text-[10px] font-medium">发现</span>
+            </div>
+            
+            <!-- 核心认购按钮 (悬浮凸起) -->
+            <div class="relative -top-6 cursor-pointer active:scale-90 transition" onclick="openInvestModal()">
+                <div class="w-14 h-14 bg-gradient-to-br from-gold to-yellow-600 rounded-full flex items-center justify-center text-black text-2xl shadow-[0_0_20px_rgba(212,175,55,0.6)] border-4 border-[#020408]">
+                    <i class="fa-solid fa-plus"></i>
+                </div>
+            </div>
+            
+            <div class="nav-item flex flex-col items-center gap-1 w-16 py-2 cursor-pointer" onclick="switchTab('assets', this)">
+                <i class="fa-solid fa-chart-pie text-xl"></i>
+                <span class="text-[10px] font-medium">资产</span>
+            </div>
+            <div class="nav-item flex flex-col items-center gap-1 w-16 py-2 cursor-pointer" onclick="switchTab('profile', this)">
+                <i class="fa-solid fa-user text-xl"></i>
+                <span class="text-[10px] font-medium">我的</span>
+            </div>
+        </div>
+
+        <!-- ================== 投资支付弹窗 ================== -->
+        <div id="investModal" class="absolute inset-0 z-[100] hidden flex-col justify-end bg-black/80 backdrop-blur-sm transition-opacity">
+            <div class="bg-[#121418] rounded-t-3xl p-6 border-t border-gold/30 w-full max-w-md mx-auto relative modal-content pb-10">
+                <div class="w-12 h-1 bg-gray-700 rounded-full mx-auto mb-6"></div>
+                
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-bold text-white">认购《城市之王》份额</h3>
+                    <button onclick="closeModal('investModal')" class="text-gray-400 p-2"><i class="fa-solid fa-xmark text-xl"></i></button>
+                </div>
+                
+                <!-- 项目信息 -->
+                <div class="bg-black p-4 rounded-xl flex gap-4 mb-6 border border-white/10">
+                    <img src="movie-2.png" class="w-20 h-28 object-cover rounded-lg bg-gray-800">
+                    <div class="flex-1 flex flex-col justify-center">
+                        <h4 class="text-white font-bold text-lg">King of The City</h4>
+                        <p class="text-xs text-blue-400 mt-1 bg-blue-900/20 inline-block px-2 py-0.5 rounded w-fit">AI 科幻 / RWA</p>
+                        <div class="flex justify-between mt-4 text-sm">
+                            <span class="text-gray-500">剩余额度</span>
+                            <span class="text-white font-mono">$240,000</span>
+                        </div>
+                        <div class="w-full bg-gray-800 h-1.5 rounded-full mt-2 overflow-hidden">
+                            <div class="bg-blue-500 h-full w-[75%]"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 支付输入 -->
+                <div class="space-y-4 mb-8">
+                    <div class="flex justify-between text-sm font-bold text-gray-400">
+                        <span>支付金额 (USDT)</span>
+                        <span>余额: <span class="text-white">5,240.00</span></span>
+                    </div>
+                    <div class="flex items-center bg-black border border-gray-700 rounded-xl px-4 py-3 focus-within:border-gold transition">
+                        <input type="number" value="1000" class="bg-transparent text-3xl font-bold text-white w-full outline-none font-mono">
+                        <span class="text-gold font-bold text-sm">MAX</span>
+                    </div>
+                    <div class="flex justify-between text-[10px] text-gray-500">
+                        <span>预计获得: 6,666.6 FFX</span>
+                        <span>Gas: $0.42</span>
+                    </div>
+                </div>
+
+                <button onclick="confirmPay()" class="w-full py-4 bg-gold text-black font-bold rounded-xl text-lg mb-4 shadow-lg active:scale-95 transition">
+                    确认支付
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // 全局变量模拟后端数据
+        let userBalance = 0;
+        let investCount = 0;
+
+        // 页面切换逻辑
+        function switchTab(pageId, element) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById('page-' + pageId).classList.add('active');
+            
+            document.querySelectorAll('.nav-item').forEach(n => {
+                n.classList.remove('active', 'text-gold');
+                n.classList.add('text-gray-500');
+            });
+            
+            if(element) {
+                element.classList.add('active', 'text-gold');
+                element.classList.remove('text-gray-500');
+            }
+        }
+
+        function openInvestModal() {
+            document.getElementById('investModal').classList.remove('hidden');
+            document.getElementById('investModal').classList.add('flex');
+        }
+        
+        function closeModal(id) {
+            document.getElementById(id).classList.add('hidden');
+            document.getElementById(id).classList.remove('flex');
+        }
+
+        // 核心交互：支付成功逻辑
+        function confirmPay() {
+            closeModal('investModal');
+            
+            // 模拟加载
+            Swal.fire({
+                title: '正在上链...',
+                text: '请在钱包中签名确认',
+                background: '#121418', color: '#fff',
+                showConfirmButton: false,
+                timer: 1500,
+                willClose: () => {
+                    // 成功提示
+                    Swal.fire({
+                        title: '认购成功!',
+                        text: '您已成功持有 $1,000 份额',
+                        icon: 'success',
+                        background: '#121418', color: '#fff',
+                        confirmButtonColor: '#D4AF37'
+                    });
+
+                    // 更新数据
+                    userBalance += 1000;
+                    investCount += 1;
+                    document.getElementById('totalBalance').innerText = '$' + userBalance.toLocaleString() + '.00';
+                    document.getElementById('investCount').innerText = investCount;
+                    document.getElementById('emptyState').style.display = 'none';
+                    
+                    // 插入新资产卡片
+                    const assetHTML = `
+                        <div class="glass-card p-4 rounded-xl flex items-center justify-between animate-[pulse_0.5s_ease-in-out]">
+                            <div class="flex items-center gap-3">
+                                <img src="movie-2.png" class="w-12 h-16 rounded-lg object-cover border border-blue-500/30">
+                                <div>
+                                    <p class="font-bold text-white text-sm">城市之王 RWA</p>
+                                    <p class="text-[10px] text-gray-500">2025-11-24 认购</p>
+                                    <span class="bg-blue-900/30 text-blue-400 text-[10px] px-1.5 py-0.5 rounded mt-1 inline-block">权益凭证 NFT</span>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <p class="font-bold text-white font-mono">$1,000</p>
+                                <p class="text-[10px] text-green-500 font-bold">+18% APY</p>
+                            </div>
+                        </div>
+                    `;
+                    document.getElementById('assetList').insertAdjacentHTML('afterbegin', assetHTML);
+                }
+            });
+        }
+    </script>
+</body>
+</html>
